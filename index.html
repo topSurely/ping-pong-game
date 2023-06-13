@@ -1,0 +1,320 @@
+<html lang="en-US">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Ping-pong bounce game</title>
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+        }
+
+        body {
+            background: white;
+        }
+
+        canvas {
+            background: white;
+            display: block;
+            margin: 0 auto;
+            stroke: black;
+
+        }
+
+        .centeredText {
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .green {
+            color: green;
+        }
+
+        .red {
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="centeredText">
+        <h1>ping pong game</h1>
+        <h2 id="best"></h2>
+        <h3 id="info"></h3>
+    </div>
+    <canvas id="myCanvas" width="800" height="240"></canvas>
+    <div>
+        <div id="ballVelocity">huh</div>
+        <div id="ballCoord">what</div>
+        <div id="input">what</div>
+        <div id="power">what</div>
+    </div>
+
+    <script>
+
+        // HELPERS
+        const getFPS = () =>
+            new Promise(resolve =>
+                requestAnimationFrame(t1 =>
+                    requestAnimationFrame(t2 => resolve((t2 - t1)))
+                )
+            )
+
+        function normalize({ x, y }) {
+            const sqrt = Math.sqrt(x * x + y * y);
+            return { x: x / sqrt, y: y / sqrt };
+        }
+
+        function vecFromAngle(angle) {
+            angle *= (Math.PI / 180);
+            return { x: Math.cos(angle), y: Math.sin(angle) };
+        }
+
+        // VARS
+        var canvas = document.getElementById("myCanvas");
+        var ctx = canvas.getContext("2d");
+
+        var throwPosRight = { x: 770, y: 160 };
+        var throwPosLeft = { x: 30, y: 160 };
+
+        var ballCoords = structuredClone(throwPosRight);
+        // var ballCoords = { x: canvas.width / 2, y: 0 };
+        var ballVelocity = { x: 0, y: 0 };
+
+        var gravity = { x: 0, y: 900 }
+
+        var moveBounds = { top: 90, bottom: 160 }
+
+        var lockBall = true;
+
+        var lastTime = Date.now();
+
+        var aimAngle = 180;
+
+        var ballFell = false;
+
+        var level = 1;
+        var highestCompleted = 0;
+
+        var bouncesNeeded = 1;
+
+        const textElement = document.getElementById("info")
+
+        const defaultString = "Press left and right to adjust the angle of your throw. Press up and down to adjust the height of your throw. Press space to charge, release to fire."
+
+        textElement.innerHTML = defaultString;
+
+        var isLeft = false;
+
+        var gameOver = false;
+
+        function tick() {
+            const deltaTime = (Date.now() - lastTime) / 1000;
+
+            if (!lockBall) {
+                applyGravity(deltaTime);
+                applyVelocity(deltaTime);
+                tableCheck(deltaTime);
+                boundsCheck();
+            }
+            else {
+                moveBall(deltaTime);
+                chargeFire(deltaTime);
+            }
+            draw();
+            // debug();
+            lastTime = Date.now();
+        }
+
+        //GAMEPLAY
+
+        //PHYSICS
+
+        function applyGravity(deltaTime) {
+            ballVelocity.x += gravity.x * deltaTime;
+            ballVelocity.y += gravity.y * deltaTime;
+        }
+
+        function applyVelocity(deltaTime) {
+            ballCoords.x += ballVelocity.x * deltaTime;
+            ballCoords.y += ballVelocity.y * deltaTime;
+        }
+
+        function updateText(lost) {
+            if (lost) {
+                textElement.classList = ['red'];
+                textElement.innerHTML = "You lost, press R to reset."
+            }
+            else {
+                textElement.innerHTML = bouncesNeeded;
+                if (bouncesNeeded == 0) textElement.classList = ['green'];
+                else if (bouncesNeeded < 0) textElement.classList = ['red'];
+                else textElement.classList = []
+            }
+        }
+
+        function tableCheck(deltaTime) {
+            const tableBounds = { left: 50 - (25 / 2), right: 50 + 700 + (25 / 2), height: 180 };
+            if (ballCoords.y + 25 / 2 > tableBounds.height && ballVelocity.y > 0) {
+                if (!ballFell && tableBounds.left < ballCoords.x && tableBounds.right > ballCoords.x) {
+                    ballCoords.y = tableBounds.height - 25 / 2;
+                    ballVelocity.y = ballVelocity.y * -0.8;
+                    if (Date.now() - lastBounce < 300) {
+                        updateText(true);
+                        gameOver = true;
+                        return;
+                    }
+                    if (gameOver) return;
+                    bouncesNeeded--;
+                    lastBounce = Date.now();
+                    updateText(false);
+                }
+                else ballFell = true;
+            }
+        }
+
+        function endGame() {
+            updateText(true); gameOver = true;
+        }
+
+        function nextLevel() {
+            isLeft = !isLeft;
+            highestCompleted = Math.max(level, highestCompleted);
+            level++;
+            bouncesNeeded = level;
+            lockBall = true;
+            ballCoords = structuredClone(isLeft ? throwPosLeft : throwPosRight);
+            ballVelocity = { x: 0, y: 0 };
+            firePower = 0;
+            aimAngle = isLeft ? 0 : 180;
+            updateText(false);
+        }
+
+        function boundsCheck() {
+            if (isLeft && ballCoords.x > throwPosRight.x) if (!gameOver) if (bouncesNeeded != 0) endGame(); else nextLevel();
+            if (!isLeft && ballCoords.x < throwPosLeft.x) if (!gameOver) if (bouncesNeeded != 0) endGame(); else nextLevel();
+            if (ballCoords.y > 240) if (!gameOver) if (bouncesNeeded != 0) endGame(); else nextLevel();
+        }
+
+        //AIMING AND FIRING
+
+        var firePower = 0;
+        var everCharged = false;
+
+        var lastBounce = 0;
+
+        function moveBall(deltaTime) {
+            let newCoord = ballCoords.y;
+            if (input.up) newCoord -= deltaTime * 100;
+            if (input.down) newCoord += deltaTime * 100;
+            if (input.left) aimAngle += deltaTime * 100
+            if (input.right) aimAngle -= deltaTime * 100
+            ballCoords.y = Math.max(Math.min(moveBounds.bottom, newCoord), moveBounds.top)
+        }
+
+        function chargeFire(deltaTime) {
+
+            if (input.fire && firePower < 1000) { everCharged = true; firePower += deltaTime * 1000 }
+            else if (everCharged) {
+                const v = vecFromAngle(aimAngle);
+                ballVelocity = { x: v.x * firePower, y: v.y * firePower }
+                lockBall = false;
+                everCharged = false;
+                updateText(false);
+            }
+        }
+
+        // DRAWING
+
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ballCoords.x, ballCoords.y, 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.closePath();
+        }
+        function drawTable() {
+            ctx.beginPath();
+            ctx.rect(50, 180, 700, 40)
+            ctx.stroke();
+            ctx.closePath();
+        }
+        function drawAimLine() {
+            ctx.beginPath();
+            const angleVec = vecFromAngle(aimAngle);
+            ctx.moveTo(ballCoords.x, ballCoords.y);
+            ctx.lineTo(ballCoords.x + angleVec.x * (20 + firePower / 10), ballCoords.y + angleVec.y * (20 + firePower / 10));
+            ctx.stroke();
+            ctx.closePath();
+        }
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBall();
+            drawTable();
+            if (lockBall)
+                drawAimLine();
+
+
+        }
+        function debug() {
+            const ballVelDebug = document.getElementById("ballVelocity");
+            const ballCoordDebug = document.getElementById("ballCoord");
+            const inputDebug = document.getElementById("input");
+            const powerDebug = document.getElementById("power");
+
+            ballVelDebug.innerHTML = `Ball Velocity ${JSON.stringify(ballVelocity)}`
+            ballCoordDebug.innerHTML = `Ball Coordinates ${JSON.stringify(ballCoords)}`
+            inputDebug.innerHTML = `Input ${JSON.stringify(input)}`
+            powerDebug.innerHTML = `Input ${JSON.stringify(firePower)}`
+        }
+
+        function resetGame() {
+            ballCoords = structuredClone(throwPosRight);
+            ballVelocity = { x: 0, y: 0 };
+            aimAngle = 180;
+            firePower = 0;
+            ballFell = false;
+            lockBall = true;
+            level = 1;
+            bouncesNeeded = level;
+            textElement.innerHTML = defaultString;
+            textElement.classList = [];
+            gameOver = false;
+            isLeft = false;
+            if (!!highestCompleted)
+                document.getElementById("best").innerHTML = `<i>Your</i> best: ${highestCompleted}`
+        }
+
+        // INPUT
+        document.addEventListener('keydown', (event) => {
+            const e = event.code;
+
+            if (e === 'KeyR') {
+                resetInput();
+                resetGame();
+            }
+
+            if (e == "ArrowUp") input.up = true;
+            else if (e == 'ArrowDown') input.down = true;
+            else if (e == 'ArrowLeft') input.left = true;
+            else if (e == 'ArrowRight') input.right = true;
+            else if (e == 'Space') input.fire = true;
+        }, false);
+        document.addEventListener('keyup', (event) => {
+            const e = event.code;
+            if (e == "ArrowUp") input.up = false;
+            else if (e == 'ArrowDown') input.down = false;
+            else if (e == 'ArrowLeft') input.left = false;
+            else if (e == 'ArrowRight') input.right = false;
+            else if (e == 'Space') input.fire = false;
+        }, false);
+
+        var input = { up: false, down: false, left: false, right: false, fire: false };
+        function resetInput() {
+            input = { up: false, down: false, left: false, right: false, fire: false };
+        }
+
+        getFPS().then(fps => setInterval(tick, fps));
+    </script>
+</body>
+
+</html>
