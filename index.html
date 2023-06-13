@@ -159,7 +159,7 @@
                 if (!ballFell && tableBounds.left < ballCoords.x && tableBounds.right > ballCoords.x) {
                     ballCoords.y = tableBounds.height - 25 / 2;
                     ballVelocity.y = ballVelocity.y * -0.95;
-                    if (Date.now() - lastBounce < 300) {
+                    if (Date.now() - lastBounce < 200) {
                         updateText(true);
                         gameOver = true;
                         return;
